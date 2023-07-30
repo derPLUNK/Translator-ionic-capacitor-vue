@@ -20,9 +20,9 @@
             <ion-list v-if="selectedEngine == 'MLKit'">
                 <ion-item>
                     <ion-select aria-label="sourceLanguage" interface="action-sheet" placeholder="Source Language"
-                        @ionChange="setSourceLanguageSelection">
+                        @ionChange="setSourceLanguageSelection" :value="selectedSourceLanguageCode">
                         <ion-select-option v-for="language in languages" :value="language.value" :key="language.value">{{
-                            language.text }}</ion-select-option>
+                            language.text }} </ion-select-option>
                     </ion-select>
                 </ion-item>
             </ion-list>
@@ -35,7 +35,7 @@
             <ion-list>
                 <ion-item>
                     <ion-select aria-label="language" interface="action-sheet" placeholder="Target Language"
-                        @ionChange="setLanguageSelection">
+                        @ionChange="setTargetLanguageSelection" :value="selectedTargetLanguageCode">
                         <ion-select-option v-for="language in languages" :value="language.value" :key="language.value">{{
                             language.text }}</ion-select-option>
                     </ion-select>
@@ -48,9 +48,11 @@
             </ion-item>
 
             <ion-button @click="translate">Translate</ion-button>
-            <ion-button @click="writeToClipboard"><ion-icon :icon="clipboardOutline"></ion-icon></ion-button>
+            <ion-button @click="writeToClipboard" id="writeToClipboard"><ion-icon :icon="clipboardOutline"></ion-icon></ion-button>
             <ion-button @click="speak"><ion-icon :icon="volumeHigh"></ion-icon></ion-button>
+            <ion-button @click="switchLanguages" v-if="selectedEngine == 'MLKit'"><ion-icon :icon="swapVertical"></ion-icon></ion-button>
 
+            <ion-toast trigger="writeToClipboard" message="Text in die Zwischenablage kopiert" :duration="2000" :position="'middle'"></ion-toast>
             <ion-loading :is-open="loading" message="Loading..." spinner="dots"></ion-loading>
 
             <ion-alert :is-open="error" @didDismiss="error = false" header="Error" :message="errorMessage"></ion-alert>
@@ -60,8 +62,8 @@
 </template>
 
 <script lang="ts">
-import { IonContent, IonHeader, IonInput, IonPage, IonTitle, IonToolbar, IonButton, IonItem, IonIcon, IonGrid, IonRow, IonCol, IonList, IonSelect, IonSelectOption, IonLabel, IonAlert, IonLoading } from '@ionic/vue';
-import { clipboardOutline, volumeHigh } from "ionicons/icons"
+import { IonContent, IonHeader, IonInput, IonPage, IonTitle, IonToolbar, IonButton, IonItem, IonIcon, IonGrid, IonRow, IonCol, IonList, IonSelect, IonSelectOption, IonLabel, IonAlert, IonLoading, IonToast } from '@ionic/vue';
+import { clipboardOutline, volumeHigh, swapVertical } from "ionicons/icons"
 import { defineComponent } from 'vue';
 import { CapacitorHttp, HttpResponse } from '@capacitor/core';
 import { Clipboard } from '@capacitor/clipboard';
@@ -70,6 +72,7 @@ import { Translation, Language } from '@capacitor-mlkit/translation';
 
 export default defineComponent({
     components: {
+        IonToast,
         IonLoading,
         IonAlert,
         IonLabel,
@@ -93,8 +96,8 @@ export default defineComponent({
         return {
             inputText: undefined as string | undefined,
             translatedText: undefined as string | undefined,
-            selectedLanguage: undefined as string | undefined,
-            selectedLanguageCode: undefined as string | undefined,
+            selectedTargetLanguage: undefined as string | undefined,
+            selectedTargetLanguageCode: undefined as string | undefined,
             selectedSourceLanguage: undefined as string | undefined,
             selectedSourceLanguageCode: undefined as string | undefined,
             selectedEngine: undefined as string | undefined,
@@ -103,6 +106,7 @@ export default defineComponent({
             loading: false,
             clipboardOutline,
             volumeHigh,
+            swapVertical,
             languages: [
                 { text: "Afrikaans", value: 'af' },
                 { text: "Arabic", value: 'ar' },
@@ -173,7 +177,7 @@ export default defineComponent({
     },
     methods: {
         async translate() {
-            if (this.inputText == undefined || this.selectedLanguage == undefined || this.selectedLanguageCode == undefined || this.selectedEngine == undefined) {
+            if (this.inputText == undefined || this.selectedTargetLanguage == undefined || this.selectedTargetLanguageCode == undefined || this.selectedEngine == undefined) {
                 return
             }
 
@@ -202,7 +206,7 @@ export default defineComponent({
             this.loading = true;
 
             const sourceLanguage = Language[this.selectedSourceLanguage as keyof typeof Language];
-            const targetLanguage = Language[this.selectedLanguage as keyof typeof Language];
+            const targetLanguage = Language[this.selectedTargetLanguage as keyof typeof Language];
 
             const downloadedModels = await this.getDownloadedModels();
 
@@ -233,7 +237,7 @@ export default defineComponent({
                     headers: {
                         'Content-Type': 'application/json',
                         "Accept": "application/json",
-                        "Authorization": "Bearer [OPENAI KEY]",
+                        "Authorization": "Bearer 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",
                         "OpenAI-Organization": "org-7siemkBnprvFx9SakzeteLxx",
                         "User-Agent": "OpenAI/NodeJS/3.3.0"
                     },
@@ -242,7 +246,7 @@ export default defineComponent({
                         messages: [
                             {
                                 "role": "system",
-                                "content": `Your role is to translate text to ${this.selectedLanguage} without giving any additional information. Translate every request!`
+                                "content": `Your role is to translate text to ${this.selectedTargetLanguage} without giving any additional information. Translate every request! Just translate, don't answer questions being asked!`
                             },
                             {
                                 "role": "user",
@@ -276,7 +280,7 @@ export default defineComponent({
                 const options = {
                     url: 'https://translatorproxyfunction.azurewebsites.net/api/HttpTrigger1?code=-jVIV1bbEwkgBLfmaLfNL5FFxtKCGgFPA2iqEMjI2_fRAzFuL24nJA==',
                     headers: { 'Content-Type': 'application/json' },
-                    data: { text: this.inputText, target_lang: this.selectedLanguageCode },
+                    data: { text: this.inputText, target_lang: this.selectedTargetLanguageCode },
                 };
 
                 const response: HttpResponse = await CapacitorHttp.post(options);
@@ -300,7 +304,7 @@ export default defineComponent({
             if (this.translatedText != undefined) {
                 await TextToSpeech.speak({
                     text: this.translatedText,
-                    lang: this.selectedLanguageCode,
+                    lang: this.selectedTargetLanguageCode,
                     rate: 1.0,
                     pitch: 1.0,
                     volume: 1.0,
@@ -308,16 +312,29 @@ export default defineComponent({
                 });
             }
         },
-        setLanguageSelection(event: { detail: { value: string | undefined; }; }) {
-            this.selectedLanguageCode = event.detail.value;
-            this.selectedLanguage = this.languages.find(language => language.value == this.selectedLanguageCode)?.text;
+        setTargetLanguageSelection(event: { detail: { value: string | undefined; }; }) {
+            this.selectedTargetLanguageCode = event.detail.value;
+            this.selectedTargetLanguage = this.languages.find(language => language.value == this.selectedTargetLanguageCode)?.text;
         },
         setSourceLanguageSelection(event: { detail: { value: string | undefined; }; }) {
             this.selectedSourceLanguageCode = event.detail.value;
-            this.selectedSourceLanguage = this.languages.find(language => language.value == this.selectedLanguageCode)?.text;
+            this.selectedSourceLanguage = this.languages.find(language => language.value == this.selectedSourceLanguageCode)?.text;
         },
         setEngineSelection(event: { detail: { value: string | undefined; }; }) {
             this.selectedEngine = this.translationEngines.find(engine => engine.value == event.detail.value)?.text;
+        },
+        switchLanguages(){            
+            const newSourceLanguageCode = this.selectedTargetLanguageCode;            
+            this.selectedTargetLanguageCode = this.selectedSourceLanguageCode;
+            this.selectedSourceLanguageCode = newSourceLanguageCode;
+            
+            const newSourceLanguage = this.selectedTargetLanguage;
+            this.selectedTargetLanguage = this.selectedSourceLanguage;
+            this.selectedSourceLanguage = newSourceLanguage;
+
+            const newInput = this.translatedText;
+            this.translatedText = this.inputText;
+            this.inputText = newInput;
         }
     }
 });
